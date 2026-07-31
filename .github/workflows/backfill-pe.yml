@@ -28,7 +28,7 @@ jobs:
           python-version: "3.12"
 
       - name: 安裝套件
-        run: pip install requests
+        run: pip install curl_cffi
 
       - name: 執行回補（用GitHub的雲端IP，不會撞到你家裡網路的限流紀錄）
         run: python build_market_pe_history.py --start "${{ inputs.start_date }}" --sleep "${{ inputs.sleep_seconds }}"
