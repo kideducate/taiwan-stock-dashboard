@@ -93,12 +93,14 @@ def fetch_trade_value_by_date(date_str):
         return None
 
     result = {}
+    table_report = []
     for key in payload:
         if not key.startswith("data"):
             continue
         fields_key = "fields" + key[4:]
         fields = payload.get(fields_key) or payload.get("fields")
         rows = payload.get(key)
+        table_report.append(f"{key}(rows={len(rows) if rows else 0},fields={fields})")
         if not fields or not rows:
             continue
         try:
@@ -114,7 +116,10 @@ def fetch_trade_value_by_date(date_str):
                 continue
             if val > 0:
                 result[code] = val
-    return result if result else None
+    if not result:
+        print(f"[MI_INDEX 解析後為空 payload的keys={list(payload.keys())} 各表狀況={table_report}] ", end="")
+        return None
+    return result
 
 
 def compute_weighted_pe(per_map, value_map):
