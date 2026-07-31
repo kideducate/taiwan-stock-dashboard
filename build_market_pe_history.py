@@ -49,7 +49,11 @@ def fetch_bwibbu_by_date(date_str):
     resp = _session().get(url, params={"response": "json", "date": date_str, "selectType": "ALL"},
                            headers=HEADERS, timeout=20)
     resp.raise_for_status()
-    payload = resp.json()
+    try:
+        payload = resp.json()
+    except Exception:
+        print(f"[BWIBBU_d 非JSON回應 HTTP{resp.status_code} 內容前150字: {resp.text[:150]!r}] ", end="")
+        return None
     if payload.get("stat") != "OK":
         print(f"[BWIBBU_d stat={payload.get('stat')!r}] ", end="")
         return None
@@ -79,7 +83,11 @@ def fetch_trade_value_by_date(date_str):
     resp = _session().get(url, params={"response": "json", "date": date_str, "type": "ALLBUT0999"},
                            headers=HEADERS, timeout=20)
     resp.raise_for_status()
-    payload = resp.json()
+    try:
+        payload = resp.json()
+    except Exception:
+        print(f"[MI_INDEX 非JSON回應 HTTP{resp.status_code} 內容前150字: {resp.text[:150]!r}] ", end="")
+        return None
     if payload.get("stat") != "OK":
         print(f"[MI_INDEX stat={payload.get('stat')!r}] ", end="")
         return None
@@ -199,8 +207,9 @@ def main():
                 got = True
                 break
             except Exception as e:
-                print(f"失敗：{e}")
-                break
+                print(f"失敗：{e}，往前一天")
+                d -= timedelta(days=1); tried += 1; time.sleep(args.sleep)
+                continue
         if not got:
             print(f"⚠ {target} 附近找不到可用資料，跳過")
             consecutive_fail += 1
