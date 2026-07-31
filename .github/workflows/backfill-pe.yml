@@ -1,0 +1,42 @@
+name: 回補大盤本益比歷史（手動觸發用）
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_date:
+        description: "回補起始日期 (YYYY-MM-DD)"
+        required: true
+        default: "2024-11-01"
+      sleep_seconds:
+        description: "每次呼叫API間隔秒數"
+        required: true
+        default: "4"
+
+permissions:
+  contents: write
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 簽出repo
+        uses: actions/checkout@v4
+
+      - name: 設定 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安裝套件
+        run: pip install requests
+
+      - name: 執行回補（用GitHub的雲端IP，不會撞到你家裡網路的限流紀錄）
+        run: python build_market_pe_history.py --start "${{ inputs.start_date }}" --sleep "${{ inputs.sleep_seconds }}"
+
+      - name: 把 market_pe_history.csv commit回repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add market_pe_history.csv
+          git diff --staged --quiet && echo "沒有變動，不用commit" || git commit -m "回補大盤本益比歷史"
+          git push
