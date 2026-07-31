@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>每日快報 · 台股整合儀表板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/*
+  設計方向：台股報價牌 / 交易機房儀表板。
+  黑瑪瑙背景＋琥珀色結構色（面板標題、分隔線、狀態燈），
+  數字一律等寬字（JetBrains Mono）模擬看板數位管，
+  紅漲綠跌沿用台股慣例，琥珀色只作結構用途、不參與漲跌語意。
+*/
+:root{
+  --bg:#0a0c0e; --panel:#14181b; --panel2:#1b2125; --border:#2a3339;
+  --text:#edf1f2; --muted:#8f979e; --blue:#4a9eff; --green:#1f9e6d;
+  --red:#e2483f; --gold:#c98a2e; --purple:#b39ddb;
+  --amber:#e8a33d; --amber-dim:rgba(232,163,61,.14);
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --sans:-apple-system,"Segoe UI","Microsoft JhengHei",sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:
+    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(232,163,61,.05), transparent),
+    var(--bg);
+  color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* 頂部看板燈條 — 訊號 */
+.board-strip{height:3px;width:100%;
+  background:linear-gradient(90deg, transparent, var(--amber) 15%, var(--amber) 85%, transparent);
+  opacity:.55}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px 64px}
+header{padding:30px 0 26px;border-bottom:1px solid var(--border);margin-bottom:28px}
+.eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:3px;color:var(--amber);text-transform:uppercase;
+  display:flex;align-items:center;gap:8px}
+.eyebrow::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--amber);
+  box-shadow:0 0 8px 1px var(--amber-dim);flex:none}
+h1{font-size:26px;font-weight:700;margin:8px 0 4px;letter-spacing:.5px}
+.sub-row{display:flex;align-items:center;gap:8px;margin-top:2px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:none;
+  box-shadow:0 0 0 3px rgba(31,158,109,.15)}
+@media(prefers-reduced-motion:no-preference){
+  .live-dot{animation:pulse 2.4s ease-in-out infinite}
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.sub{font-family:var(--mono);font-size:12.5px;color:var(--muted);letter-spacing:.2px}
+.upload-row{margin-top:16px;display:flex;gap:8px}
+.upload-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border-radius:6px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);font-size:13px;font-family:var(--mono);cursor:pointer;transition:border-color .15s,color .15s}
+.upload-btn:hover{border-color:var(--amber);color:var(--amber)}
+input[type=file]{display:none}
+
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:18px;margin-top:24px}
+.capture-section{padding:4px 0}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:24px 26px;
+  position:relative;transition:border-color .15s}
+@media(hover:hover){.card:hover{border-color:#3a444c}}
+.card-title{font-family:var(--mono);font-size:12px;color:var(--amber);letter-spacing:1.5px;text-transform:uppercase;
+  margin-bottom:18px;display:flex;align-items:center;justify-content:flex-start;gap:8px}
+.card-title::before{content:'';width:5px;height:5px;background:var(--amber);flex:none;
+  box-shadow:0 0 6px 0 var(--amber-dim)}
+
+/* 大盤總覽 */
+.mkt-card{grid-column:span 12}
+.mkt-top{display:flex;align-items:baseline;gap:18px;flex-wrap:wrap;margin-bottom:18px}
+.mkt-price{font-size:36px;font-weight:700;font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.mkt-chg{font-size:16px;font-weight:600;font-family:var(--mono)}
+.mkt-meta{font-size:12px;font-family:var(--mono);color:var(--muted);margin-left:auto}
+.pivot-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:3px;font-size:12px;
+  font-family:var(--mono);font-weight:600;border:1px solid transparent}
+.pivot-badge.above{background:rgba(31,158,109,.12);color:var(--green);border-color:rgba(31,158,109,.3)}
+.pivot-badge.below{background:rgba(226,72,63,.12);color:var(--red);border-color:rgba(226,72,63,.3)}
+#mktCanvas{width:100%;height:180px;display:block;margin-top:10px}
+.pivot-legend{display:flex;gap:16px;font-size:11px;font-family:var(--mono);color:var(--muted);margin-top:8px}
+.pivot-legend span{display:flex;align-items:center;gap:5px}
+.lso{width:16px;height:0;display:inline-block}
+
+/* 融資餘額 / 指標讀數卡 */
+.margin-card{grid-column:span 12;display:flex;align-items:center;gap:24px 34px;flex-wrap:wrap}
+.margin-stat{display:flex;flex-direction:column;gap:6px}
+.margin-label{font-size:11px;font-family:var(--mono);color:var(--muted);letter-spacing:.3px}
+.margin-val{font-size:23px;font-weight:700;font-family:var(--mono);font-variant-numeric:tabular-nums;line-height:1.3}
+
+/* 個股卡片 */
+.stock-card{grid-column:span 4;display:flex;flex-direction:column;gap:12px}
+@media(max-width:900px){.stock-card{grid-column:span 6}}
+@media(max-width:600px){.stock-card{grid-column:span 12}}
+.stock-head{display:flex;align-items:baseline;justify-content:space-between}
+.stock-code{font-size:12px;font-family:var(--mono);color:var(--muted)}
+.stock-name{font-size:20px;font-weight:700;font-family:var(--sans)}
+.stock-badge{font-size:11px;font-family:var(--mono);padding:3px 9px;border-radius:3px;background:rgba(74,158,255,.12);color:var(--blue);
+  border:1px solid rgba(74,158,255,.28)}
+.stock-badge.today{background:rgba(31,158,109,.12);color:var(--green);border-color:rgba(31,158,109,.3)}
+.zone-bar{position:relative;height:6px;border-radius:3px;background:var(--panel2);margin:4px 0 2px;overflow:visible;
+  border:1px solid var(--border)}
+.zone-fill{position:absolute;left:0;top:0;height:100%;border-radius:2px;background:linear-gradient(90deg,var(--green),var(--amber))}
+.zone-labels{display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);color:var(--muted)}
+.stock-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:14px;margin-top:6px}
+.stock-stats .k{color:var(--muted);font-family:var(--mono);font-size:12px}
+.stock-stats .v{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums}
+.mini-kline{width:100%;height:150px;display:block;margin:6px 0}
+
+.export-btn{display:inline-block;padding:8px 16px;border-radius:6px;border:1px solid var(--border);
+  background:var(--panel2);color:var(--muted);font-size:13px;font-family:var(--mono);cursor:pointer;margin-left:0;transition:border-color .15s,color .15s}
+.export-btn:hover{border-color:var(--green);color:var(--green)}
+.export-btn:disabled{opacity:.4;cursor:wait}
+
+.section-title{grid-column:span 12;font-size:14px;color:var(--text);font-weight:700;letter-spacing:1px;
+  font-family:var(--mono);text-transform:uppercase;margin:14px 0 -2px;padding:18px 0 14px;
+  border-top:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.section-title::before{content:'';width:10px;height:2px;background:var(--amber);flex:none}
+
+.empty{grid-column:span 12;text-align:center;padding:70px 20px;color:var(--muted);
+  border:1px dashed var(--border);border-radius:6px}
+.empty-icon{font-size:30px;margin-bottom:10px;opacity:.7}
+
+footer{margin-top:32px;padding-top:18px;border-top:1px solid var(--border);font-size:11px;font-family:var(--mono);
+  color:var(--muted);line-height:1.9}
+
+/* 密碼鎖遮罩 */
+.lock-overlay{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px}
+.lock-box{width:100%;max-width:320px;text-align:center}
+.lock-title{font-family:var(--mono);font-size:13px;color:var(--muted);letter-spacing:1px;margin-bottom:16px}
+.lock-input{width:100%;padding:12px 14px;border-radius:6px;border:1px solid var(--border);background:var(--panel);
+  color:var(--text);font-family:var(--mono);font-size:16px;letter-spacing:4px;text-align:center;outline:none}
+.lock-input:focus{border-color:var(--amber)}
+.lock-error{font-family:var(--mono);font-size:12px;color:var(--red);margin-top:10px;min-height:16px}
+</style>
+</head>
+<body>
+<div class="board-strip"></div>
+<div id="lockOverlay" class="lock-overlay">
+  <div class="lock-box">
+    <div class="eyebrow" style="margin-bottom:14px">Taiwan Stock · Daily Briefing</div>
+    <div class="lock-title">輸入密碼</div>
+    <input type="password" id="lockInput" class="lock-input" autocomplete="off" autofocus>
+    <button id="lockBtn" class="upload-btn" style="margin-top:14px;width:100%;justify-content:center">解鎖</button>
+    <div id="lockError" class="lock-error"></div>
+  </div>
+</div>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Taiwan Stock · Daily Briefing</div>
+    <h1>每日快報</h1>
+    <div class="sub-row">
+      <span class="live-dot"></span>
+      <div class="sub" id="metaSub">尚未載入資料</div>
+    </div>
+    <div class="upload-row">
+      <label class="upload-btn" for="fi">📂 載入 dashboard.json</label>
+      <input type="file" id="fi" accept=".json">
+      <button class="export-btn" id="exportBtn" onclick="exportImage()" disabled>📸 匯出圖片</button>
+    </div>
+  </header>
+
+  <div id="sections">
+    <div class="empty">
+      <div class="empty-icon">📊</div>
+      <div>載入 dashboard.json 後，這裡會顯示大盤轉折與選股訊號</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── 密碼鎖：雜湊比對在瀏覽器本地做，不會把密碼傳到任何伺服器。
+//    只是擋一般人隨手瀏覽用，不是防駭客等級的保護（原始碼裡看得到雜湊值，
+//    要換密碼的話，把下面 LOCK_HASH 換成新密碼的SHA-256雜湊值即可）。
+const LOCK_HASH = '0a0667865bc17f9d624bcf11088057bbab46336e7dae65f3d5366f4f7a18333e';
+const LOCK_KEY = 'twdash_unlocked';
+
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+function unlockUI(){
+  document.getElementById('lockOverlay').style.display = 'none';
+}
+
+async function tryUnlock(){
+  const input = document.getElementById('lockInput');
+  const hash = await sha256Hex(input.value);
+  if(hash === LOCK_HASH){
+    localStorage.setItem(LOCK_KEY, '1');
+    document.getElementById('lockError').textContent = '';
+    unlockUI();
+  }else{
+    document.getElementById('lockError').textContent = '密碼錯誤';
+    input.value = '';
+    input.focus();
+  }
+}
+
+if(localStorage.getItem(LOCK_KEY) === '1'){
+  unlockUI();
+}else{
+  document.getElementById('lockBtn').addEventListener('click', tryUnlock);
+  document.getElementById('lockInput').addEventListener('keydown', e=>{
+    if(e.key === 'Enter') tryUnlock();
+  });
+}
+
+let DASH = null;
+
+document.getElementById('fi').addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      DASH = JSON.parse(ev.target.result);
+      render();
+    }catch(err){
+      alert('讀取失敗，請確認是有效的 dashboard.json：' + err.message);
+    }
+  };
+  reader.readAsText(f, 'utf-8');
+});
+
+// 網頁一開啟就自動抓同資料夾底下的 dashboard.json（給GitHub Pages這種代管情境用）。
+// 抓不到（例如直接雙擊開啟本機檔案、沒有透過網頁伺服器）就靜靜失敗，
+// 保留手動上傳按鈕當備援，不影響原本的使用方式。
+(async function autoLoad(){
+  try{
+    const resp = await fetch('./dashboard.json', {cache:'no-store'});
+    if(!resp.ok) return;
+    const data = await resp.json();
+    DASH = data;
+    render();
+  }catch(err){
+    // 抓不到就維持空白狀態，等使用者手動上傳
+  }
+})();
+
+function fmtNum(v, digits=0){
+  if(v==null || isNaN(v)) return '—';
+  return Number(v).toLocaleString(undefined, {maximumFractionDigits:digits, minimumFractionDigits:digits});
+}
+
+function newSection(id){
+  const div = document.createElement('div');
+  div.className = 'grid capture-section';
+  div.id = id;
+  return div;
+}
+
+// 股本濾網：跟 run_all.py 的 CAPITAL_STRATEGY_RANGES／虛擬持倉-股本版／Telegram自動發送
+// 用同一套規則。這裡不用重算股本，直接用 dashboard.json 裡 briefing_picks_capital
+// （run_all.py Step 5.9b 已經算好的「今日訊號中，股本符合甜蜜點的代號」）來對照篩選，
+// 避免這個頁面自己重算一次股本又要另外載入 shares_cache.json。
+const CAPITAL_RANGE_LABEL = {
+  "盤整突破-嚴格版": "股本10-30億",
+  "創高量縮":       "股本100-500億",
+  "MA20斜率策略":    "股本30-100億",
+};
+function capitalCodesFor(strategy){
+  const list = DASH.briefing_picks_capital;
+  if(!Array.isArray(list)) return null;  // 沒有這個欄位＝舊版 dashboard.json，回傳 null 代表「無法判斷」
+  return new Set(list.filter(p=>p.strategy===strategy).map(p=>p.code));
+}
+
+function render(){
+  document.getElementById('metaSub').textContent =
+    `資料日期 ${DASH.date || '—'}　產生於 ${DASH.generated_at || '—'}`;
+
+  const sections = document.getElementById('sections');
+  sections.innerHTML = '';
+
+  const secOverview = newSection('sec-overview');
+  sections.appendChild(secOverview);
+  renderFearGreedCard(secOverview);
+  renderVixCard(secOverview);
+  renderTwvixCard(secOverview);
+  renderMarketCard(secOverview);
+  renderPeRiverCard(secOverview);
+  renderMarginCard(secOverview);
+  renderMaintenanceRatioCard(secOverview);
+  renderInstSummaryCard(secOverview);
+  renderBusinessCycleCard(secOverview);
+
+  const secBreakout = newSection('sec-breakout');
+  sections.appendChild(secBreakout);
+  renderBreakoutCards(secBreakout);
+
+  const secNHC = newSection('sec-newhighc');
+  sections.appendChild(secNHC);
+  renderNewHighCCards(secNHC);
+
+  const secV8 = newSection('sec-v8');
+  sections.appendChild(secV8);
+  renderV8Cards(secV8);
+
+  const secDisp = newSection('sec-disposal');
+  sections.appendChild(secDisp);
+  renderDisposalOpportunityCards(secDisp);
+
+  const footer = document.createElement('footer');
+  footer.id = 'footerNote';
+  footer.innerHTML = '本頁內容為系統依技術指標（盤整突破、支撐位、量能比）自動計算的參考資訊，不構成投資建議，進出場區間為歷史型態統計，非未來績效保證。投資有風險，請自行評估並嚴設停損。<br>選股口徑已對齊「虛擬持倉-股本版」：VCP-強勢VCP不在回測前三名，本頁不再顯示；其餘三類額外套用股本濾網，處置預警-機會股維持不設限。';
+  sections.appendChild(footer);
+
+  document.getElementById('exportBtn').disabled = false;
+}
+
+async function exportImage(){
+  const btn = document.getElementById('exportBtn');
+  btn.disabled = true;
+  const dateStr = (DASH && DASH.date) ? DASH.date : new Date().toISOString().slice(0,10);
+  const sectionEls = Array.from(document.querySelectorAll('.capture-section'));
+
+  for(let i=0;i<sectionEls.length;i++){
+    const el = sectionEls[i];
+    if(el.children.length===0) continue;   // 空區塊不匯出
+    btn.textContent = `匯出中 ${i+1}/${sectionEls.length}...`;
+    try{
+      const canvas = await html2canvas(el, {backgroundColor:'#0a0c0e', scale:2, useCORS:true});
+      const link = document.createElement('a');
+      link.download = `每日快報_${dateStr}_${String(i+1).padStart(2,'0')}_${el.id}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+      await new Promise(r=>setTimeout(r, 350));   // 避免瀏覽器把連續多個下載擋掉
+    }catch(err){
+      console.error('匯出失敗：', el.id, err);
+    }
+  }
+
+  btn.disabled = false;
+  btn.textContent = '📸 匯出圖片';
+}
+
+// ── 個股迷你K線 ────────────────────────────────────────
+function drawMiniKline(canvasId, kdata, signalDate){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas || !kdata || !kdata.dates || !kdata.dates.length) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth || 260, h = 150;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  const n = kdata.dates.length;
+  const highs = kdata.high.filter(v=>v!=null), lows = kdata.low.filter(v=>v!=null);
+  if(!highs.length || !lows.length) return;
+  const maxV = Math.max(...highs), minV = Math.min(...lows);
+  const range = (maxV-minV)||1;
+  const padT=20, padB=22;   // 頂部留給訊號標記，底部留給日期文字
+  const plotH = h-padT-padB;
+  const cw = Math.max(1.5, Math.min(9, w/n-1.2));
+  const xOf = i => (i/(n-1))*(w-cw) + cw/2;
+  const yOf = v => padT + plotH - ((v-minV)/range)*plotH;
+
+  // K棒
+  for(let i=0;i<n;i++){
+    const o=kdata.open[i], c=kdata.close[i], hi=kdata.high[i], lo=kdata.low[i];
+    if(o==null||c==null||hi==null||lo==null) continue;
+    const xc = xOf(i), bull = c>=o, col = bull?'#e2483f':'#1f9e6d';
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1.3;
+    ctx.beginPath(); ctx.moveTo(xc,yOf(hi)); ctx.lineTo(xc,yOf(lo)); ctx.stroke();
+    const top=yOf(Math.max(o,c)), bot=yOf(Math.min(o,c));
+    ctx.fillRect(xc-cw/2, top, cw, Math.max(1.5,bot-top));
+  }
+
+  // 訊號點標記（▲）：優先用指定的 signalDate（例如盤整突破日），找不到就標最後一根（今日）
+  let signalIdx = -1;
+  if(signalDate){
+    signalIdx = kdata.dates.indexOf(signalDate);
+  }
+  if(signalIdx === -1){
+    for(let i=n-1;i>=0;i--){ if(kdata.low[i]!=null){ signalIdx=i; break; } }
+  }
+  if(signalIdx >= 0 && kdata.low[signalIdx]!=null){
+    const xc = xOf(signalIdx);
+    const yTip = yOf(kdata.low[signalIdx]) + 4;
+    ctx.fillStyle = '#e8a33d';
+    ctx.beginPath();
+    ctx.moveTo(xc, yTip+15);
+    ctx.lineTo(xc-6, yTip+3);
+    ctx.lineTo(xc+6, yTip+3);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // 日期軸：只標第一筆跟最後一筆，避免小圖擠爆
+  ctx.fillStyle = '#8f979e';
+  ctx.font = '11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(kdata.dates[0].slice(5), xOf(0)-10, h-6);
+  ctx.textAlign = 'right';
+  ctx.fillText(kdata.dates[n-1].slice(5), xOf(n-1)+10, h-6);
+  if(signalIdx > 0 && signalIdx < n-1){
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#e8a33d';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(kdata.dates[signalIdx].slice(5), xOf(signalIdx), h-6);
+  }
+}
+
+// ── 融資餘額卡 ──────────────────────────────────────────
+function renderMarginCard(grid){
+  const m = DASH.margin_data;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!m || m.today==null){
+    card.innerHTML = `<div class="card-title" style="width:100%">融資餘額</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有融資餘額資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const down = m.change_amt < 0;
+  const color = down ? 'var(--green)' : 'var(--red)';
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:140px">
+      <div class="margin-label">融資餘額</div>
+      <div class="margin-val">${fmtNum(m.today)} <span style="font-size:12px;color:var(--muted);font-weight:400">張</span></div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">較前一日</div>
+      <div class="margin-val" style="color:${color}">${m.change_amt>=0?'+':''}${fmtNum(m.change_amt)} 張</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">變化比例</div>
+      <div class="margin-val" style="color:${color}">${m.change_pct>=0?'+':''}${fmtNum(m.change_pct,2)}%</div>
+    </div>
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料日期</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${m.date||'—'}</div>
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── 融資維持率卡（估算值，不是官方公布數字）───────────────
+function renderMaintenanceRatioCard(grid){
+  const mm = DASH.margin_maintenance;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!mm || mm.ratio==null){
+    card.innerHTML = `<div class="card-title" style="width:100%">融資維持率（估算）</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有融資維持率資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  // 融資維持率一般認知：160%以上偏安全，130%以下要注意，120%以下逼近多數券商的整戶追繳線
+  let color = 'var(--green)', note = '偏安全';
+  if(mm.ratio < 120){ color = 'var(--red)'; note = '偏緊，注意斷頭風險'; }
+  else if(mm.ratio < 150){ color = 'var(--gold)'; note = '中性偏緊'; }
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:140px">
+      <div class="margin-label">融資維持率（估算）</div>
+      <div class="margin-val" style="color:${color}">${fmtNum(mm.ratio,2)}%</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">概略評估</div>
+      <div class="margin-val" style="font-size:14px;color:${color}">${note}</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">估算對上檔數</div>
+      <div class="margin-val" style="font-size:14px">${mm.matched_stocks||'—'} 檔</div>
+    </div>
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料日期</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${mm.date||'—'}</div>
+    </div>
+    <div style="width:100%;font-size:11px;color:var(--muted);margin-top:8px">
+      ※ 證交所沒有每日公布全市場融資維持率，這是用逐股融資餘額×收盤價估算擔保品市值、
+      除以融資金額餘額自行推算出來的參考值，不是官方數字，僅供概略評估市場信用風險用。
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── 三大法人買賣超總額卡（全市場加總，Step 1 每日法人資料順便算出來的）──
+function renderInstSummaryCard(grid){
+  const s = DASH.inst_summary;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!s || s.inst_total==null){
+    card.innerHTML = `<div class="card-title" style="width:100%">三大法人買賣超</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有三大法人買賣超資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const fmtWan = v => v==null ? '—' : (v>=0?'+':'') + (v/10000).toFixed(1) + ' 萬';
+  const colorOf = v => v==null ? 'var(--muted)' : (v>=0 ? 'var(--red)' : 'var(--green)');
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:120px">
+      <div class="margin-label">外資</div>
+      <div class="margin-val" style="color:${colorOf(s.foreign_net)}">${fmtWan(s.foreign_net)}</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">投信</div>
+      <div class="margin-val" style="color:${colorOf(s.trust_net)}">${fmtWan(s.trust_net)}</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">自營商</div>
+      <div class="margin-val" style="color:${colorOf(s.dealer_net)}">${fmtWan(s.dealer_net)}</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">三大法人合計</div>
+      <div class="margin-val" style="color:${colorOf(s.inst_total)}">${fmtWan(s.inst_total)}</div>
+    </div>
+    ${s.breadth && s.breadth.total ? `
+    <div class="margin-stat">
+      <div class="margin-label">漲跌家數</div>
+      <div class="margin-val" style="font-size:15px">
+        <span style="color:var(--red)">${s.breadth.up}漲</span> /
+        <span style="color:var(--green)">${s.breadth.down}跌</span> /
+        <span style="color:var(--muted)">${s.breadth.flat}平</span>
+      </div>
+    </div>` : ''}
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料日期</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${s.date||'—'}</div>
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── 景氣對策信號卡（國發會，每月發布）──────────────────────
+const CYCLE_LIGHT_COLOR = {
+  '紅燈':   'var(--red)',
+  '黃紅燈': '#E8A33D',
+  '綠燈':   'var(--green)',
+  '黃藍燈': '#5FA8D3',
+  '藍燈':   'var(--blue)',
+};
+const CYCLE_LIGHT_MEANING = {
+  '紅燈':   '景氣熱絡',
+  '黃紅燈': '注意（可能轉向熱絡）',
+  '綠燈':   '景氣穩定',
+  '黃藍燈': '注意（可能轉向低迷）',
+  '藍燈':   '景氣低迷',
+};
+function renderBusinessCycleCard(grid){
+  const bc = DASH.business_cycle;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!bc || !bc.light){
+    card.innerHTML = `<div class="card-title" style="width:100%">景氣對策信號</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有景氣對策信號資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const color = CYCLE_LIGHT_COLOR[bc.light] || 'var(--muted)';
+  const meaning = CYCLE_LIGHT_MEANING[bc.light] || '';
+  const streakNote = (bc.streak && bc.streak > 1) ? `連續${bc.streak}個月${bc.light}` : '';
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:140px">
+      <div class="margin-label">景氣對策信號</div>
+      <div class="margin-val" style="color:${color}">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};margin-right:6px;vertical-align:middle"></span>${bc.light}
+      </div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">綜合判斷分數</div>
+      <div class="margin-val">${bc.score!=null && bc.score!==''?bc.score:'—'}</div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">燈號意義</div>
+      <div class="margin-val" style="font-size:14px;color:${color}">${meaning}</div>
+    </div>
+    ${streakNote ? `
+    <div class="margin-stat">
+      <div class="margin-label">連續月數</div>
+      <div class="margin-val" style="font-size:14px;color:${color}">${streakNote}</div>
+    </div>` : ''}
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料月份</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${bc.date||'—'}</div>
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── 恐慌貪婪指數卡（自製版，六項指標綜合，不是市場公認的標準指標）──
+const FG_LABEL_COLOR = {
+  '極度恐慌': 'var(--green)',
+  '恐慌':     '#5FA8D3',
+  '中性':     'var(--muted)',
+  '貪婪':     '#E8A33D',
+  '極度貪婪': 'var(--red)',
+};
+const FG_COMPONENT_NAME = {
+  margin_ratio:   '融資維持率',
+  pivot_pct:      '大盤轉折位置',
+  inst_5d:        '法人5日買賣超',
+  breadth_ratio:  '漲跌家數比',
+  margin_5d_chg:  '融資5日變化率',
+  twii_chg:       '大盤單日漲跌',
+};
+function renderFearGreedCard(grid){
+  const fg = DASH.fear_greed;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!fg || fg.score==null){
+    card.innerHTML = `<div class="card-title" style="width:100%">恐慌貪婪指數</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有恐慌貪婪指數資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const color = FG_LABEL_COLOR[fg.label] || 'var(--muted)';
+  const comps = fg.components || {};
+  const compBadges = Object.keys(FG_COMPONENT_NAME).map(k=>{
+    const c = comps[k];
+    if(!c || c.score==null) return '';
+    return `<span style="display:inline-block;margin:2px 8px 2px 0;font-size:11px;color:var(--muted)">
+      ${FG_COMPONENT_NAME[k]} ${c.score.toFixed ? c.score.toFixed(0) : c.score}分</span>`;
+  }).join('');
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:160px">
+      <div class="margin-label">恐慌貪婪指數（自製版）</div>
+      <div class="margin-val" style="color:${color};font-size:28px">${fg.score.toFixed(1)} <span style="font-size:16px">${fg.label}</span></div>
+    </div>
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料日期</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${fg.date||'—'}</div>
+    </div>
+    <div style="width:100%;margin-top:6px">${compBadges}</div>
+    <div style="width:100%;font-size:11px;color:var(--muted);margin-top:6px">
+      ※ 自製指標，仿CNN Fear &amp; Greed Index做法，用融資維持率、大盤轉折位置、法人買賣超、漲跌家數、
+      融資餘額變化、大盤漲跌幅六項等權重平均，累積滿60個交易日後改用歷史百分位排名計分，不是市場公認的標準指標。
+      ${fg.history_days!=null && fg.history_days < 60 ? `（目前累積 ${fg.history_days} 天，未滿60天的項目先用固定門檻估算）` : ''}
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── VIX恐慌指數卡（CBOE，美股波動率，外部參考用）──────────
+function renderVixCard(grid){
+  const v = DASH.vix;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!v || v.value==null){
+    card.innerHTML = `<div class="card-title" style="width:100%">VIX恐慌指數</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有VIX資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  // VIX一般認知：15以下平靜、15~20正常、20~30緊張、30以上恐慌
+  let color = 'var(--green)';
+  if(v.value >= 30){ color = 'var(--red)'; }
+  else if(v.value >= 20){ color = 'var(--gold)'; }
+
+  const chgColor = v.change==null ? 'var(--muted)' : (v.change>=0 ? 'var(--red)' : 'var(--green)');
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:140px">
+      <div class="margin-label">VIX恐慌指數</div>
+      <div class="margin-val" style="color:${color}">${fmtNum(v.value,2)} <span style="font-size:14px">${v.level||''}</span></div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">較前一交易日</div>
+      <div class="margin-val" style="color:${chgColor}">${v.change>=0?'+':''}${fmtNum(v.change,2)}（${v.change_pct>=0?'+':''}${fmtNum(v.change_pct,2)}%）</div>
+    </div>
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料日期</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${v.date||'—'}</div>
+    </div>
+    <div style="width:100%;font-size:11px;color:var(--muted);margin-top:8px">
+      ※ CBOE波動率指數，反映美股（S&amp;P500）未來30天預期波動幅度，非台股原生指標，僅供外部情緒參考，
+      不建議單獨當進出場訊號。${v.source==='stale' ? '（目前顯示為快取舊資料，即時抓取失敗）' : ''}
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── 台指VIX卡（VIXTWN，台灣期交所編製，台股原生恐慌指標）──
+function renderTwvixCard(grid){
+  const tv = DASH.twvix;
+  const card = document.createElement('div');
+  card.className = 'card margin-card';
+
+  if(!tv || tv.value==null){
+    card.innerHTML = `<div class="card-title" style="width:100%">台指VIX</div>
+      <div style="color:var(--muted)">此份 dashboard.json 沒有台指VIX資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  // 台指VIX一般認知：跟CBOE VIX同套門檻，20以上偏悲觀
+  let color = 'var(--green)';
+  if(tv.value >= 30){ color = 'var(--red)'; }
+  else if(tv.value >= 20){ color = 'var(--gold)'; }
+
+  const chgColor2 = tv.change==null ? 'var(--muted)' : (tv.change>=0 ? 'var(--red)' : 'var(--green)');
+
+  card.innerHTML = `
+    <div class="margin-stat" style="min-width:140px">
+      <div class="margin-label">台指VIX（VIXTWN）</div>
+      <div class="margin-val" style="color:${color}">${fmtNum(tv.value,2)} <span style="font-size:14px">${tv.level||''}</span></div>
+    </div>
+    <div class="margin-stat">
+      <div class="margin-label">較前一交易日</div>
+      <div class="margin-val" style="color:${chgColor2}">${tv.change>=0?'+':''}${fmtNum(tv.change,2)}（${tv.change_pct>=0?'+':''}${fmtNum(tv.change_pct,2)}%）</div>
+    </div>
+    <div class="margin-stat" style="margin-left:auto">
+      <div class="margin-label">資料日期</div>
+      <div class="margin-val" style="font-size:14px;color:var(--muted)">${tv.date||'—'}</div>
+    </div>
+    <div style="width:100%;font-size:11px;color:var(--muted);margin-top:8px">
+      ※ 台灣期交所依CBOE VIX編製公式，用台指選擇權(TXO)價格算出，反映加權指數未來30天預期波動幅度，
+      是台股原生的恐慌指標。資料來源FinMind，僅供參考。${tv.source==='stale' ? '（目前顯示為快取舊資料，即時抓取失敗）' : ''}
+    </div>
+  `;
+  grid.appendChild(card);
+}
+
+// ── 大盤轉折卡 ──────────────────────────────────────────
+function renderMarketCard(grid){
+  const mp = DASH.market_pivot;
+  const card = document.createElement('div');
+  card.className = 'card mkt-card';
+
+  if(!mp || !mp.daily || !mp.daily.length){
+    card.innerHTML = `<div class="card-title">大盤轉折</div>
+      <div style="color:var(--muted);padding:20px 0">此份 dashboard.json 沒有 market_pivot 資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const real = mp.daily.filter(d=>d.open!=null);
+  const last = real[real.length-1];
+  const bull = last.change>=0;
+  const above = last.pivot!=null && last.close>last.pivot;
+  const rh = DASH.recent_highs;
+
+  const highRow = rh ? `
+    <div class="pivot-legend" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);gap:28px">
+      ${rh.high_3m!=null ? `<span style="display:flex;flex-direction:column;gap:3px">
+        <span style="color:var(--muted);font-size:11px">近3個月高點</span>
+        <span style="font-family:var(--mono);font-size:14px;color:var(--text)">
+          ${fmtNum(rh.high_3m)}　<span style="color:${rh.drawdown_3m_pct<0?'var(--green)':'var(--red)'}">回撤${fmtNum(rh.drawdown_3m_pct,2)}%</span>
+          <span style="color:var(--muted);font-size:11px">（${rh.high_3m_date}）</span>
+        </span>
+      </span>` : ''}
+      ${rh.high_6m!=null ? `<span style="display:flex;flex-direction:column;gap:3px">
+        <span style="color:var(--muted);font-size:11px">近6個月高點</span>
+        <span style="font-family:var(--mono);font-size:14px;color:var(--text)">
+          ${fmtNum(rh.high_6m)}　<span style="color:${rh.drawdown_6m_pct<0?'var(--green)':'var(--red)'}">回撤${fmtNum(rh.drawdown_6m_pct,2)}%</span>
+          <span style="color:var(--muted);font-size:11px">（${rh.high_6m_date}）</span>
+        </span>
+      </span>` : ''}
+    </div>` : '';
+
+  card.innerHTML = `
+    <div class="card-title">大盤轉折　台股加權指數</div>
+    <div class="mkt-top">
+      <div class="mkt-price" style="color:${bull?'var(--red)':'var(--green)'}">${fmtNum(last.close)}</div>
+      <div class="mkt-chg" style="color:${bull?'var(--red)':'var(--green)'}">${bull?'+':''}${fmtNum(last.change)} (${(last.change/(last.close-last.change)*100).toFixed(2)}%)</div>
+      ${last.pivot!=null?`<span class="pivot-badge ${above?'above':'below'}">${above?'▲ 多方轉折之上':'▼ 空方轉折之下'}　${fmtNum(last.pivot)}</span>`:''}
+      <div class="mkt-meta">${last.date}</div>
+    </div>
+    <canvas id="mktCanvas"></canvas>
+    <div class="pivot-legend">
+      <span><span class="lso" style="border-top:2.5px solid var(--gold)"></span>多空轉折（當月操作用）</span>
+      <span><span class="lso" style="border-top:2px dashed var(--purple)"></span>預告轉折（下月用）</span>
+    </div>
+    ${highRow}
+  `;
+  grid.appendChild(card);
+  drawMktChart(mp.daily.slice(-90));
+}
+
+function drawMktChart(data){
+  const canvas = document.getElementById('mktCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = 180;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  const padL=54, padR=10, padT=10, padB=20;
+  const plotW=w-padL-padR, plotH=h-padT-padB;
+
+  const vals = data.filter(d=>d.close!=null).flatMap(d=>[d.high,d.low]).concat(
+    data.filter(d=>d.pivot!=null).map(d=>d.pivot),
+    data.filter(d=>d.next_piv!=null).map(d=>d.next_piv)
+  );
+  const maxV = Math.max(...vals), minV = Math.min(...vals);
+  const range = (maxV-minV)||1;
+  const n = data.length;
+  const xOf = i => padL + (i/(n-1))*plotW;
+  const yOf = v => padT + plotH - ((v-minV)/range)*plotH;
+
+  ctx.strokeStyle='rgba(232,163,61,.08)'; ctx.fillStyle='#8f979e'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+  for(let g=0;g<=3;g++){
+    const v=minV+range*g/3, y=yOf(v);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText(fmtNum(v), padL-6, y+3);
+  }
+
+  // K棒
+  const cw = Math.max(2, Math.min(8, plotW/n-1));
+  data.forEach((d,i)=>{
+    if(d.open==null) return;
+    const xc=xOf(i), bull=d.close>=d.open, col=bull?'#e2483f':'#1f9e6d';
+    ctx.strokeStyle=col; ctx.fillStyle=col; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(xc,yOf(d.high)); ctx.lineTo(xc,yOf(d.low)); ctx.stroke();
+    const top=yOf(Math.max(d.open,d.close)), bot=yOf(Math.min(d.open,d.close));
+    ctx.fillRect(xc-cw/2, top, cw, Math.max(1,bot-top));
+  });
+
+  // 轉折線
+  function line(key, color, dash){
+    ctx.strokeStyle=color; ctx.lineWidth=2; ctx.setLineDash(dash||[]);
+    ctx.beginPath(); let started=false;
+    data.forEach((d,i)=>{
+      if(d[key]==null) return;
+      const x=xOf(i), y=yOf(d[key]);
+      if(!started){ctx.moveTo(x,y); started=true;} else ctx.lineTo(x,y);
+    });
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  line('pivot','#c98a2e');
+  line('next_piv','#b39ddb',[5,4]);
+}
+
+// ── 大盤本益比河流（用「取樣日期的實際大盤收盤價 ÷ 取樣日期本益比」反推EPS，
+//    再用歷史本益比分布的百分位 × 內插後的EPS，算出各條色帶的價格）──
+function quantileOf(sortedArr, q){
+  const pos = (sortedArr.length - 1) * q;
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  return sortedArr[base+1] !== undefined
+    ? sortedArr[base] + rest * (sortedArr[base+1] - sortedArr[base])
+    : sortedArr[base];
+}
+function renderPeRiverCard(grid){
+  const pr = DASH.pe_river;
+  const mp = DASH.market_pivot;
+  const card = document.createElement('div');
+  card.className = 'card mkt-card';
+
+  if(!pr || !pr.history || pr.history.length < 2 || !mp || !mp.daily){
+    card.innerHTML = `<div class="card-title">大盤本益比河流</div>
+      <div style="color:var(--muted);padding:20px 0">此份 dashboard.json 沒有足夠的本益比河流資料</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const dailyByDate = {};
+  mp.daily.filter(d=>d.close!=null).forEach(d=>{ dailyByDate[d.date] = d.close; });
+
+  const anchors = pr.history
+    .map(h=>{
+      const close = dailyByDate[h.date];
+      return (close!=null && h.pe>0) ? {date:h.date, pe:h.pe, eps: close/h.pe} : null;
+    })
+    .filter(Boolean)
+    .sort((a,b)=>a.date.localeCompare(b.date));
+
+  if(anchors.length < 2){
+    card.innerHTML = `<div class="card-title">大盤本益比河流</div>
+      <div style="color:var(--muted);padding:20px 0">本益比取樣日期跟大盤日線對不起來，樣本不足</div>`;
+    grid.appendChild(card);
+    return;
+  }
+
+  const peSorted = anchors.map(a=>a.pe).sort((a,b)=>a-b);
+  const bands = [
+    {q:0.1, color:'#1f9e6d', label:'便宜'},
+    {q:0.3, color:'#6fae7c'},
+    {q:0.5, color:'#e8a33d', label:'合理'},
+    {q:0.7, color:'#d9834a'},
+    {q:0.9, color:'#e2483f', label:'昂貴'},
+  ].map(b=>({...b, pe: quantileOf(peSorted, b.q)}));
+
+  function epsAt(dateStr){
+    if(dateStr <= anchors[0].date) return anchors[0].eps;
+    if(dateStr >= anchors[anchors.length-1].date) return anchors[anchors.length-1].eps;
+    for(let i=0;i<anchors.length-1;i++){
+      const a=anchors[i], b=anchors[i+1];
+      if(dateStr >= a.date && dateStr <= b.date){
+        const t0=new Date(a.date).getTime(), t1=new Date(b.date).getTime(), t=new Date(dateStr).getTime();
+        const ratio = t1>t0 ? (t-t0)/(t1-t0) : 0;
+        return a.eps + ratio*(b.eps-a.eps);
+      }
+    }
+    return anchors[anchors.length-1].eps;
+  }
+
+  const windowDaily = mp.daily.filter(d=>d.close!=null && d.date >= anchors[0].date);
+  const chartData = windowDaily.map(d=>{
+    const eps = epsAt(d.date);
+    return {date:d.date, close:d.close, bands: bands.map(b=>eps*b.pe)};
+  });
+
+  const latestClose = chartData[chartData.length-1].close;
+  const sparseNote = anchors.length < 12
+    ? `<div style="width:100%;font-size:11px;color:var(--muted);margin-top:10px">
+        ※ 目前只累積了${anchors.length}個取樣點，色帶百分位還不夠穩定，會隨著資料每天累加越來越準。</div>`
+    : '';
+
+  card.innerHTML = `
+    <div class="card-title">大盤本益比河流</div>
+    <div class="mkt-top">
+      <div class="mkt-price">${fmtNum(latestClose)}</div>
+      <div class="mkt-meta">目前本益比 ${fmtNum(pr.latest_pe,2)} 倍　｜　${pr.latest_date}</div>
+    </div>
+    <canvas id="peRiverCanvas"></canvas>
+    <div class="pivot-legend">
+      ${bands.map(b=>`<span><span class="lso" style="border-top:3px solid ${b.color}"></span>${fmtNum(b.pe,1)}倍${b.label?'（'+b.label+'）':''}</span>`).join('')}
+    </div>
+    ${sparseNote}
+  `;
+  grid.appendChild(card);
+  drawPeRiverChart(chartData, bands);
+}
+function drawPeRiverChart(data, bands){
+  const canvas = document.getElementById('peRiverCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = 220;
+  canvas.width = w*dpr; canvas.height = h*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  const n = data.length;
+  if(n < 2) return;
+  const padL=54, padR=10, padT=10, padB=20;
+  const xOf = i => padL + (i/(n-1))*(w-padL-padR);
+
+  let lo=Infinity, hi=-Infinity;
+  data.forEach(d=>{ lo=Math.min(lo,d.close,...d.bands); hi=Math.max(hi,d.close,...d.bands); });
+  const range=(hi-lo)||1;
+  const yOf = v => padT + (1-(v-lo)/range)*(h-padT-padB);
+
+  ctx.strokeStyle='rgba(232,163,61,.08)'; ctx.fillStyle='#8f979e'; ctx.font='10px sans-serif'; ctx.textAlign='right';
+  for(let g=0;g<=4;g++){
+    const v=lo+range*g/4, y=yOf(v);
+    ctx.beginPath(); ctx.moveTo(padL,y); ctx.lineTo(w-padR,y); ctx.stroke();
+    ctx.fillText(fmtNum(v), padL-6, y+3);
+  }
+
+  for(let bi=0; bi<bands.length-1; bi++){
+    ctx.beginPath();
+    data.forEach((d,i)=>{ const x=xOf(i), y=yOf(d.bands[bi]); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    for(let i=n-1;i>=0;i--){ const x=xOf(i), y=yOf(data[i].bands[bi+1]); ctx.lineTo(x,y); }
+    ctx.closePath();
+    ctx.fillStyle = bands[bi].color + '26';
+    ctx.fill();
+  }
+
+  bands.forEach((b,bi)=>{
+    ctx.beginPath();
+    data.forEach((d,i)=>{ const x=xOf(i), y=yOf(d.bands[bi]); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.strokeStyle=b.color; ctx.lineWidth=1; ctx.globalAlpha=.55;
+    ctx.stroke(); ctx.globalAlpha=1;
+  });
+
+  ctx.beginPath();
+  data.forEach((d,i)=>{ const x=xOf(i), y=yOf(d.close); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+  ctx.strokeStyle='#edf1f2'; ctx.lineWidth=2;
+  ctx.stroke();
+
+  ctx.fillStyle='#8f979e'; ctx.font='10px sans-serif'; ctx.textAlign='left';
+  ctx.fillText(data[0].date, xOf(0)-10, h-6);
+  ctx.textAlign='right';
+  ctx.fillText(data[n-1].date, xOf(n-1)+10, h-6);
+}
+
+// ── ② 創高量縮（布林位階0~3，投本比或外本比>0，股本100-500億）───
+function renderNewHighCCards(grid){
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = `② 創高量縮（布林位階0~3，投本比或外本比>0，${CAPITAL_RANGE_LABEL['創高量縮']}）`;
+  grid.appendChild(title);
+
+  const all = DASH.newhigh_contraction_scan;
+  if(!Array.isArray(all)){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<div class="empty-icon">🆕</div><div>此份 dashboard.json 沒有創高量縮資料</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+  const capCodes = capitalCodesFor('創高量縮');
+  const list = all.filter(r=>
+    r.bb_rank10!=null && r.bb_rank10>=0 && r.bb_rank10<=3 &&
+    ((r.trust_ratio_5d_chg!=null && r.trust_ratio_5d_chg>0) ||
+     (r.foreign_ratio_5d_chg!=null && r.foreign_ratio_5d_chg>0)) &&
+    (capCodes===null || capCodes.has(r.code))
+  ).slice(0,9);
+  if(!list.length){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    const hint = capCodes===null
+      ? '（若此份 dashboard.json 沒有投本比/外本比資料，這條件永遠不會通過，需確認 run_all.py 是否有提供 insti-csv）'
+      : '（含股本濾網後今日沒有符合的標的，屬正常情況，不代表資料有誤）';
+    empty.innerHTML = `<div class="empty-icon">🆕</div><div>掃描出 0 支符合「布林位階0~3 且 投本比或外本比>0${capCodes===null?'':'，且股本符合甜蜜點'}」的股票<br>${hint}</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+
+  list.forEach(r=>{
+    const card = document.createElement('div');
+    card.className = 'card stock-card';
+    const klId = 'kl-nhc-'+r.code;
+    card.innerHTML = `
+      <div class="stock-head">
+        <div>
+          <div class="stock-code">${r.code}</div>
+          <div class="stock-name">${r.name}</div>
+        </div>
+        <span class="stock-badge today">布林${fmtNum(r.bb_rank10,1)}</span>
+      </div>
+      <canvas id="${klId}" class="mini-kline"></canvas>
+      <div class="stock-stats">
+        <div><span class="k">收盤</span> <span class="v">${fmtNum(r.price,2)}</span></div>
+        <div><span class="k">MA10</span> <span class="v">${fmtNum(r.ma10,2)}</span></div>
+        <div><span class="k">投本比5日Δ</span> <span class="v">${r.trust_ratio_5d_chg!=null?fmtNum(r.trust_ratio_5d_chg,3)+'%':'—'}</span></div>
+        <div><span class="k">外本比5日Δ</span> <span class="v">${r.foreign_ratio_5d_chg!=null?fmtNum(r.foreign_ratio_5d_chg,3)+'%':'—'}</span></div>
+        <div><span class="k">今/昨量比</span> <span class="v">${fmtNum(r.vol_day_ratio,2)}</span></div>
+        <div><span class="k">創高至今</span> <span class="v">${r.days_since_1y_high!=null?r.days_since_1y_high+'天':'—'}</span></div>
+      </div>
+    `;
+    grid.appendChild(card);
+    drawMiniKline(klId, DASH.kline_data && DASH.kline_data[r.code]);
+  });
+}
+
+// ── ③ MA20斜率策略選股（股本30-100億）───────────────────
+function renderV8Cards(grid){
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = `③ MA20斜率策略選股（${CAPITAL_RANGE_LABEL['MA20斜率策略']}）`;
+  grid.appendChild(title);
+
+  const all = DASH.v8_scan;
+  if(!Array.isArray(all)){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<div class="empty-icon">🎯</div><div>此份 dashboard.json 沒有 v8策略 資料</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+  const capCodes = capitalCodesFor('MA20斜率策略');
+  const list = all.filter(r=>capCodes===null || capCodes.has(r.code)).slice(0,9);
+  if(!list.length){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    const hint = capCodes===null ? '（資料已載入，今日沒有標的通過篩選）' : '（含股本濾網後今日沒有符合的標的，屬正常情況，不代表資料有誤）';
+    empty.innerHTML = `<div class="empty-icon">🎯</div><div>掃描出 0 支符合條件的股票${hint}</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+
+  list.forEach(r=>{
+    const card = document.createElement('div');
+    card.className = 'card stock-card';
+    const klId = 'kl-v8-'+r.code;
+    card.innerHTML = `
+      <div class="stock-head">
+        <div>
+          <div class="stock-code">${r.code}</div>
+          <div class="stock-name">${r.name||''}</div>
+        </div>
+        <span class="stock-badge today">斜率+${fmtNum(r.ma20_slope,2)}%</span>
+      </div>
+      <canvas id="${klId}" class="mini-kline"></canvas>
+      <div class="stock-stats">
+        <div><span class="k">收盤</span> <span class="v">${fmtNum(r.price,2)}</span></div>
+        <div><span class="k">漲跌%</span> <span class="v" style="color:${r.chg_pct>=0?'var(--red)':'var(--green)'}">${r.chg_pct>=0?'+':''}${fmtNum(r.chg_pct,2)}%</span></div>
+        <div><span class="k">布林位階</span> <span class="v">${fmtNum(r.bb_rank,2)}</span></div>
+        <div><span class="k">chip_60d</span> <span class="v">${fmtNum(r.chip_60d,2)}</span></div>
+        <div><span class="k">MA10</span> <span class="v">${fmtNum(r.ma10,2)}</span></div>
+        <div><span class="k">量(張)</span> <span class="v">${r.volume_k!=null?fmtNum(r.volume_k):'—'}</span></div>
+      </div>
+    `;
+    grid.appendChild(card);
+    drawMiniKline(klId, DASH.kline_data && DASH.kline_data[r.code]);
+  });
+}
+
+// ── ④ 處置預警-機會股（月線斜率>1 且 布林位階<4，不設股本濾網）──
+function renderDisposalOpportunityCards(grid){
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = '④ 處置預警－機會股（不設股本濾網）';
+  grid.appendChild(title);
+
+  const dp = DASH.disposition;
+  if(!dp || !Array.isArray(dp.disposal)){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<div class="empty-icon">💡</div><div>此份 dashboard.json 沒有處置股資料</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+  const list = dp.disposal.filter(r=>
+    r.ma20_slope!=null && r.ma20_slope>1 && r.bb_rank!=null && r.bb_rank<4
+  ).slice(0,9);
+  if(!list.length){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<div class="empty-icon">💡</div><div>掃描出 0 支符合「機會股」條件的處置股（月線斜率>1 且 布林位階<4）</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+
+  list.forEach(r=>{
+    const card = document.createElement('div');
+    card.className = 'card stock-card';
+    const klId = 'kl-disp-'+r.code;
+    card.innerHTML = `
+      <div class="stock-head">
+        <div>
+          <div class="stock-code">${r.code} · ${r.market||''}</div>
+          <div class="stock-name">${r.name}</div>
+        </div>
+        <span class="stock-badge">處置中</span>
+      </div>
+      <canvas id="${klId}" class="mini-kline"></canvas>
+      <div class="stock-stats">
+        <div><span class="k">收盤</span> <span class="v">${fmtNum(r.price,2)}</span></div>
+        <div><span class="k">MA20斜率</span> <span class="v" style="color:var(--red)">+${fmtNum(r.ma20_slope,2)}%</span></div>
+        <div><span class="k">布林位階</span> <span class="v">${fmtNum(r.bb_rank,2)}</span></div>
+        <div><span class="k">處置模式</span> <span class="v" style="font-size:11px">${r.mode||'—'}</span></div>
+        <div><span class="k">處置期間</span> <span class="v" style="font-size:11px">${r.start||''}~${r.end||''}</span></div>
+      </div>
+    `;
+    grid.appendChild(card);
+    drawMiniKline(klId, DASH.kline_data && DASH.kline_data[r.code]);
+  });
+}
+
+// ── 盤整突破（嚴格版，股本10-30億）───────────────────────
+function renderBreakoutCards(grid){
+  const bo = DASH.breakout;
+  const title = document.createElement('div');
+  title.className = 'section-title';
+  title.textContent = `① 盤整突破（嚴格版，${CAPITAL_RANGE_LABEL['盤整突破-嚴格版']}）`;
+
+  if(!bo || !bo.versions || !bo.versions['嚴格版']){
+    grid.appendChild(title);
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.innerHTML = `<div class="empty-icon">📐</div><div>此份 dashboard.json 沒有盤整突破-嚴格版資料</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+
+  const vdata = bo.versions['嚴格版'];
+  grid.appendChild(title);
+
+  const capCodes = capitalCodesFor('盤整突破-嚴格版');
+  const list = [...(vdata.today_signals||[]), ...(vdata.recent_signals||[])]
+    .filter(s=>capCodes===null || capCodes.has(s.code))
+    .slice(0,9);
+  if(!list.length){
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    const hint = capCodes===null ? '' : '（含股本濾網後，屬正常情況，不代表資料有誤）';
+    empty.innerHTML = `<div class="empty-icon">📐</div><div>今日及近5日內沒有符合「嚴格版」條件的突破訊號${hint}</div>`;
+    grid.appendChild(empty);
+    return;
+  }
+
+  list.forEach(s=>{
+    const card = document.createElement('div');
+    card.className = 'card stock-card';
+    const pct = Math.max(0, Math.min(100, (s.extend_pct / 8) * 100)); // extend_pct上限抓8%做視覺化比例
+    const klId = 'kl-bo-'+s.code;
+    card.innerHTML = `
+      <div class="stock-head">
+        <div>
+          <div class="stock-code">${s.code} · ${s.market||''}</div>
+          <div class="stock-name">${s.name}</div>
+        </div>
+        <span class="stock-badge ${s.is_today?'today':''}">${s.is_today?'今日突破':`${s.days_ago}天前`}</span>
+      </div>
+      <canvas id="${klId}" class="mini-kline"></canvas>
+      <div class="zone-bar"><div class="zone-fill" style="width:${pct}%"></div></div>
+      <div class="zone-labels"><span>支撐 ${fmtNum(s.support,2)}</span><span>現價 ${fmtNum(s.current_close,2)}</span></div>
+      <div class="stock-stats">
+        <div><span class="k">延伸幅度</span> <span class="v">${fmtNum(s.extend_pct,2)}%</span></div>
+        <div><span class="k">量能倍數</span> <span class="v">${fmtNum(s.vol_ratio,2)}x</span></div>
+        <div><span class="k">盤整波動</span> <span class="v">${fmtNum(s.range_pct,2)}%</span></div>
+        <div><span class="k">突破日</span> <span class="v" style="font-size:11px">${s.breakout_date}</span></div>
+      </div>
+    `;
+    grid.appendChild(card);
+    drawMiniKline(klId, DASH.kline_data && DASH.kline_data[s.code], s.breakout_date);
+  });
+}
+</script>
+</body>
+</html>
