@@ -21,25 +21,33 @@ build_market_pe_history.py
   --end     回補結束日期（預設今天）
   --sleep   每次呼叫API之間間隔幾秒，預設3秒
 """
-import requests
 import csv
 import time
 import argparse
 from pathlib import Path
 from datetime import date, datetime, timedelta
+from curl_cffi import requests as cffi_req
 
 OUTPUT_CSV = Path("market_pe_history.csv")
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Referer": "https://www.twse.com.tw/zh/trading/historical/bwibbu-day.html",
+    "Accept-Language": "zh-TW,zh;q=0.9",
 }
+
+
+def _session():
+    s = cffi_req.Session(impersonate="chrome124")
+    s.verify = False
+    return s
 
 
 def fetch_bwibbu_by_date(date_str):
     """date_str: YYYYMMDD。回傳 {證券代號: 本益比} 或 None（非交易日/無資料）"""
     url = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"
-    params = {"response": "json", "date": date_str, "selectType": "ALL"}
-    resp = requests.get(url, params=params, headers=HEADERS, timeout=20)
+    resp = _session().get(url, params={"response": "json", "date": date_str, "selectType": "ALL"},
+                           headers=HEADERS, timeout=20)
     resp.raise_for_status()
     payload = resp.json()
     if payload.get("stat") != "OK":
@@ -68,20 +76,19 @@ def fetch_bwibbu_by_date(date_str):
 def fetch_trade_value_by_date(date_str):
     """date_str: YYYYMMDD。回傳 {證券代號: 成交金額} 或 None（非交易日/無資料）"""
     url = "https://www.twse.com.tw/exchangeReport/MI_INDEX"
-    params = {"response": "json", "date": date_str, "type": "ALLBUT0999"}
-    resp = requests.get(url, params=params, headers=HEADERS, timeout=20)
+    resp = _session().get(url, params={"response": "json", "date": date_str, "type": "ALLBUT0999"},
+                           headers=HEADERS, timeout=20)
     resp.raise_for_status()
     payload = resp.json()
     if payload.get("stat") != "OK":
         print(f"[MI_INDEX stat={payload.get('stat')!r}] ", end="")
         return None
 
-    # 這支API可能回好幾個table（data1, data2, ...），逐個找含「成交金額」欄位的那個
     result = {}
     for key in payload:
         if not key.startswith("data"):
             continue
-        fields_key = "fields" + key[4:]  # data8 對應 fields8，data 對應 fields
+        fields_key = "fields" + key[4:]
         fields = payload.get(fields_key) or payload.get("fields")
         rows = payload.get(key)
         if not fields or not rows:
