@@ -2574,7 +2574,7 @@ def build_kline_slices(price_data: dict, codes: set, days: int = 90) -> dict:
 
 def step45_strong_and_screener(stock_list: pd.DataFrame,
                                 price_data: dict,
-                                skip_yf=False) -> tuple[dict, list, list]:
+                                skip_yf=False) -> tuple[dict, list, list, list, list, list]:
     """
     同時執行 STEP 4（強勢股）和 STEP 5（創新高 + 連買MA）
     共用同一份 price_data，避免重複下載。
@@ -2605,7 +2605,7 @@ def step45_strong_and_screener(stock_list: pd.DataFrame,
         log.warning("STEP 4/5: stock_list 為空，跳過強勢股/創新高篩選")
         empty_strong = {"stocks": [], "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
                         "note": "TWSE 股票清單抓取失敗"}
-        return empty_strong, [], []
+        return empty_strong, [], [], [], [], []
     info_map = stock_list.set_index("code").to_dict("index")
 
     # 從 stock_list 取產業對照（_fetch_stock_list 已從 TWSE 抓取產業別）
