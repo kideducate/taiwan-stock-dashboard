@@ -155,12 +155,17 @@ def fetch_trade_value_by_date(date_str):
     return result
 
 
-def compute_weighted_pe(per_map, value_map):
-    """回傳 (加權平均本益比, 納入計算的檔數) 或 None（樣本不足）"""
+def compute_weighted_pe(per_map, value_map, max_per=100):
+    """回傳 (加權平均本益比, 納入計算的檔數) 或 None（樣本不足）。
+    排除本益比 > max_per 的離群值（通常是獲利接近0、本益比被墊高到幾百倍的個股，
+    這種股票即使成交金額大，也不該主導整個大盤的本益比估算）。
+    """
     total_weight = 0.0
     total_weighted_pe = 0.0
     used = 0
     for code, per in per_map.items():
+        if per > max_per:
+            continue
         val = value_map.get(code)
         if not val:
             continue
