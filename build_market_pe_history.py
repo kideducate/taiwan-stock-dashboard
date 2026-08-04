@@ -94,28 +94,61 @@ def fetch_trade_value_by_date(date_str):
 
     result = {}
     table_report = []
-    for key in payload:
-        if not key.startswith("data"):
-            continue
-        fields_key = "fields" + key[4:]
-        fields = payload.get(fields_key) or payload.get("fields")
-        rows = payload.get(key)
-        table_report.append(f"{key}(rows={len(rows) if rows else 0},fields={fields})")
-        if not fields or not rows:
-            continue
-        try:
-            idx_code = fields.index("證券代號")
-            idx_val = fields.index("成交金額")
-        except ValueError:
-            continue
-        for row in rows:
-            code = str(row[idx_code]).strip()
-            try:
-                val = float(str(row[idx_val]).replace(",", ""))
-            except (ValueError, TypeError):
+
+    # 新版格式：payload 裡有一個 "tables" 清單，每個元素是一張表格
+    tables = payload.get("tables")
+    if tables:
+        for i, t in enumerate(tables):
+            if not isinstance(t, dict):
                 continue
-            if val > 0:
-                result[code] = val
+            fields = t.get("fields") or t.get("field") or t.get("title") or []
+            rows = t.get("data") or t.get("rows") or []
+            field_names = [f.get("title") if isinstance(f, dict) else f for f in fields] if fields else []
+            table_report.append(f"tables[{i}](rows={len(rows) if rows else 0}, fields={field_names[:15]})")
+            if not field_names or not rows:
+                continue
+            try:
+                idx_code = field_names.index("證券代號")
+                idx_val = field_names.index("成交金額")
+            except ValueError:
+                continue
+            for row in rows:
+                if isinstance(row, dict):
+                    code = str(row.get("證券代號", "")).strip()
+                    raw_val = row.get("成交金額")
+                else:
+                    code = str(row[idx_code]).strip()
+                    raw_val = row[idx_val]
+                try:
+                    val = float(str(raw_val).replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+                if code and val > 0:
+                    result[code] = val
+    else:
+        for key in payload:
+            if not key.startswith("data"):
+                continue
+            fields_key = "fields" + key[4:]
+            fields = payload.get(fields_key) or payload.get("fields")
+            rows = payload.get(key)
+            table_report.append(f"{key}(rows={len(rows) if rows else 0},fields={fields})")
+            if not fields or not rows:
+                continue
+            try:
+                idx_code = fields.index("證券代號")
+                idx_val = fields.index("成交金額")
+            except ValueError:
+                continue
+            for row in rows:
+                code = str(row[idx_code]).strip()
+                try:
+                    val = float(str(row[idx_val]).replace(",", ""))
+                except (ValueError, TypeError):
+                    continue
+                if val > 0:
+                    result[code] = val
+
     if not result:
         print(f"[MI_INDEX 解析後為空 payload的keys={list(payload.keys())} 各表狀況={table_report}] ", end="")
         return None
