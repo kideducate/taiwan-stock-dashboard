@@ -1,11 +1,11 @@
 {
-  "fetched_at": "2026-10-23T11:57:38.401321",
+  "fetched_at": "2026-10-26T13:27:57.572822",
   "data": {
-    "value": 19.7,
-    "change": 0.67,
-    "change_pct": 3.52,
+    "value": 19.01,
+    "change": -0.44,
+    "change_pct": -2.26,
     "level": "正常",
-    "date": "2026-10-23",
+    "date": "2026-10-26",
     "source": "live"
   }
 }
