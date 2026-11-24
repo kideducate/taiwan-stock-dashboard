@@ -1,11 +1,11 @@
 {
-  "fetched_at": "2026-11-23T18:39:59.168988",
+  "fetched_at": "2026-11-24T18:08:57.615690",
   "data": {
-    "value": 26.22,
-    "change": -9.67,
-    "change_pct": -26.94,
+    "value": 26.82,
+    "change": 0.2,
+    "change_pct": 0.75,
     "level": "緊張",
-    "date": "2026-11-23",
+    "date": "2026-11-24",
     "source": "live"
   }
 }
